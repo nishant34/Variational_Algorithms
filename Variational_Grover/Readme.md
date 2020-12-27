@@ -1,7 +1,7 @@
 # Variationally learning Grover Search Algorithm
-* Implementation of Variationally learning Grover Search Algorithm given in the following [paper](https://arxiv.org/pdf/1805.09337.pdf).
-* Basic Gates (only the ones supported by tensorflow quantum) have been used.
-* A recursive implementation of N-bit contolled rotation and CNOT gates is provided.
+* Implementation of Variationally learning Grover Search Algorithm given in the following [paper](https://arxiv.org/abs/2007.01210).
+* The paper  proposes an idea of selecting architecture using iteration over a pool of gates along with varying the depth value of circuit and making the operations as parallel as possible.
+
 
 # Requirements
 If running on a terminal Anaconda can be used to manage environments.
