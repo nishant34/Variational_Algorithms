@@ -24,4 +24,4 @@ To install tensorflow quantum:
  
 ```
 
-
+Device Model file to merge the compleet code will be uploaded soon.
