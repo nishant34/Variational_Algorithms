@@ -6,15 +6,15 @@ from utility import *
 #import tensorflow as tf
 #import tensorflow_quantum as tfq
 ##class which acts as an interface to add gates to the circuit
-
+theta_u = np.pi/2
 class custom_gate_set:
     def __init__(self):
-        self.gate_list = ["I","Rx","Ry","Rz","X","Y","Z","CNOT","CZ","CX","H"]
-        self.continous_param_gate_list = ["Rx","Ry","Rz","CZ","CX"]
+        self.gate_list = ["I","RX","RY","RZ","X","Y","Z","CNOT","CZ","CX","H"]
+        self.continous_param_gate_list = ["RX","RY","RZ","CZ","CX"]
         self.gate_to_num_qubits_dict = {
-            "Rx":1,
-            "Ry":1,
-            "Rz":1,
+            "RX":1,
+            "RY":1,
+            "RZ":1,
             "X":1,
             "Y":1,
             "Z":1,
@@ -27,17 +27,17 @@ class custom_gate_set:
         self.gate_function_list = []
         
     def set_gates(self):
+        self.gate_function_list.append(cirq.I)
         self.gate_function_list.append(cirq.rx)
         self.gate_function_list.append(cirq.ry)
         self.gate_function_list.append(cirq.rz)
-        self.gate_function_list.append(cirq.X)
+        self.gate_function_list.append((cirq.X**theta_u))
         self.gate_function_list.append(cirq.Y)
         self.gate_function_list.append(cirq.Z)
         self.gate_function_list.append(cirq.CNOT)
         self.gate_function_list.append(cirq.CZ)
         self.gate_function_list.append(cirq.H)
-        self.gate_function_list.append(cirq.IdentityGate)
-
+        
     def get_gate_dict(self):
         gate_dict = {
 
@@ -103,16 +103,25 @@ class custom_gate_set:
 
         if num_qubits_to_act ==1:
             if not conitnous_param:
-             circuit.append(self.gate_function_list[gate_dict[gate_name]](qubits[0]))
+             #print(gate_name)
+             #print(gate_dict[gate_name])
+             circuit.append(self.gate_function_list[gate_dict[gate_name]](qubits))
             
             else:
-                circuit.append((self.gate_function_list[gate_dict[gate_name]]**symbol)(qubits[0]))
+                try:
+                  circuit.append((self.gate_function_list[gate_dict[gate_name]]**symbol)(qubits))
+                #print("in the add_gate_to_circuit_function")
+                #print(self.gate_function_list[gate_dict[gate_name]])
+                except:
+                  circuit.append((self.gate_function_list[gate_dict[gate_name]](symbol))(qubits))
 
-        if num_qubits_to_act ==2:
+        elif num_qubits_to_act ==2:
             if not conitnous_param:
              circuit.append(self.gate_function_list[gate_dict[gate_name]](qubits[0],qubits[1]))
             
             else:
+                #print("in the add_gate_to_circuit_function")
+                #print(self.gate_function_list[gate_dict[gate_name]])
                 circuit.append((self.gate_function_list[gate_dict[gate_name]]**symbol)(qubits[0],qubits[1]))
         
         else:
@@ -147,6 +156,7 @@ class custom_gate_set:
             return False
     
     
+
             
             
 
