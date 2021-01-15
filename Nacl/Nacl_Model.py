@@ -2,7 +2,7 @@ import cirq
 import tensorflow_quantum as tfq
 import tensorflow as tf
 import numpy as np
-from tf.keras.models import Model
+from tensorflow.keras.models import Model
 import skopt
 from State import *
 import sympy
@@ -13,32 +13,45 @@ import tensorboard
 from train_helper import *
 from cirq.contrib.svg import SVGCircuit
 from skopt.space.space import Real, Integer, Categorical
-import tf.keras.backend as K
+import tensorflow.keras.backend as K
 from Gate_set import *
+from skopt.utils import use_named_args
+#import tensorflow_probaility as tfp
+from utility import *
 
+sequence_tester = []
 
 class Nacl_circuit:
-    def __init__(self, num_qubits, allowed_gate_set, max_depth=15):
+    def __init__(self, num_qubits, allowed_gate_set, noisy_device, max_depth=15):
         #allowed gate set is 2-D list with 1st dimension determining the quibit and 2nd the allowed gates
         self.num_qubits = num_qubits
         self.allowed_gate_set = allowed_gate_set
         self.max_depth = max_depth
         self.gate_interface = custom_gate_set()
         self.gate_interface.set_gates()
+        self.noisy_device = noisy_device
+        #print("in the Nacl_circuit initializer")
+        #print(self.noisy_device)
+        self.possible_unitaries = get_possible_unitaries(allowed_gate_set,num_qubits)
     
     def manage_gate_interface(self, gate_name, qubits, circuit, symbol, index):
         if gate_name[0].isdigit():
             qubit_indices, gate_name = extract_qubit_gates_from_multi_qubit(gate_name)
-            required_qubits = qubits[qubit_indices]
+            required_qubits = [qubits[i-1] for i in qubit_indices]
             if gate_name in self.gate_interface.continous_param_gate_list:
                 self.gate_interface.add_gate_to_circuit(circuit,required_qubits,gate_name,len(qubit_indices),False,True,symbol)
             else:
                 self.gate_interface.add_gate_to_circuit(circuit,required_qubits,gate_name,len(qubit_indices),False,False,symbol)
+            if self.noisy_device.noise_method==1:
+                self.noisy_device.apply_manual_error_gates(gate_name,circuit,required_qubits,len(qubit_indices))
+
         else:
             if gate_name in self.gate_interface.continous_param_gate_list:
               self.gate_interface.add_gate_to_circuit(circuit,qubits[index],gate_name,1,False,True,symbol)
             else:
                 self.gate_interface.add_gate_to_circuit(circuit,qubits[index],gate_name,1,False,False,symbol)
+            if self.noisy_device.noise_method==1:
+                self.noisy_device.apply_manual_error_gates(gate_name,circuit,qubits[index],1)
 
         
     def prepare_complete_circuit(self, L_value, k_values, symbols, circuit, qubits):
@@ -62,31 +75,55 @@ class Nacl_circuit:
             
             return circuit
     
+    def prepare_unitary_base_circuit(self, k_sequence, symbols, circuit, qubits):
+         counter = 0
+         for k_value in k_sequence:
+             #print(k_value)
+             curr_combination = self.possible_unitaries[int(k_value)]
+             #print(curr_combination)
+             curr_symbols = symbols[counter*self.num_qubits:(counter+1)*self.num_qubits]
+             self.append_combination(circuit, curr_combination, qubits, curr_symbols)
+             counter+=1
+         
+         return circuit
+
+    def append_combination(self, circuit, curr_layer_list, qubits, symbols):
+        index = 0
+        #print("in the append combination")
+        #print(len(curr_layer_list))
+        for gate in curr_layer_list:
+            if gate!= "used":
+             self.manage_gate_interface(gate, qubits, circuit, symbols[index], index)
+            index+=1
+
 
     def plot_circuit(self, circuit):
         
         SVGCircuit(circuit)
-
+    
     
 
-   
-                     
 class Nacl_procedure(Model):
 
     def __init__(self, num_qubits, noisy_device, category, max_allowed_depth = 15):
+        super(Nacl_procedure, self).__init__()
         self.num_qubits = num_qubits
         self.device_model = noisy_device
         self.state_class = states(num_qubits, "Nacl")
         total_params = max_allowed_depth*(num_qubits+num_qubits)+1
-        self.all_symbols = states.get_params(num_params=total_params)
+        self.all_symbols = self.state_class.get_params(num_params=total_params)
         ###self.L_values = self.all_symbols[0]
         ##k_values and theta values will be indexed accordingly with respect to 3D to 1D index conversion
-        k_values_end_index = num_qubits*max_allowed_depth+1,
+        k_values_end_index = num_qubits*max_allowed_depth+1
         ###self.k_values = self.all_symbols[1:k_values_end_index]
         self.theta_values  = self.all_symbols[k_values_end_index:total_params]
         self.category = category
-        self.circuit_class = Nacl_circuit(num_qubits, noisy_device.get_allowed_gate_set(), max_allowed_depth)
+        self.circuit_class = Nacl_circuit(num_qubits, noisy_device.gate_set_list, noisy_device, max_allowed_depth)
         self.expectation_layer = tfq.layers.Expectation()
+        if noisy_device.noise_method==2:
+            #applying deploarizing channel at last
+            self.expectation_layer =  tfq.layers.Expectation(backend=cirq.DensityMatrixSimulator(noise=cirq.depolarize(0.001)))
+        self.k_space_shape = len(self.circuit_class.possible_unitaries)
 
 
     def set_cost_function(self, cost_function):
@@ -112,65 +149,161 @@ class Nacl_procedure(Model):
         self.train_outputs  = train_labels
     
     def set_readouts(self, category, qubits):
+        self.qubits = qubits
         self.readouts = (cirq.Z(qubits[-1]))
 
         if category>0:
-            self.readouts = self.input_circuit
+            self.readouts = [cirq.Z(qubit) for qubit in qubits]
         
     
-    def set_hyperparams_value(self, L_value, k_values):
+    def set_hyperparams_value(self, L_value):
         self.hyperparam_L = L_value
-        self.hyperparam_k = k_values
+        #self.hyperparam_k = k_values
 
     def prepare_circuit(self, qubits):
         circuit = cirq.Circuit()
-        circuit = self.circuit_class.prepare_complete_circuit(self.hyperparam_L, self.hyperparam_k, self.symbols, circuit, qubits)
+        #print("in he prepare circuit")
+        #print(qubits)
+        #circuit = cirq.Circuit()
+        #self.hyperparam_L=10
+        curr = 10
+        #self.get_prob_layers(curr)
+        k_sequences  = self.sample(curr)
+        #print(k_sequences)
+        #s#top
+        circuit = self.circuit_class.prepare_unitary_base_circuit(k_sequences, self.theta_values, circuit, qubits)
+        ##circuit = self.circuit_class.prepare_complete_circuit(self.hyperparam_L, self.hyperparam_k, self.symbols, circuit, qubits)
         #self.curr_circuit = circuit
         return circuit
     
+    def prepare_circuit_1(self, qubits):
+        circuit = cirq.Circuit()
+        #print("in he prepare circuit")
+        #print(qubits)
+        #circuit = cirq.Circuit()
+        #self.hyperparam_L=10
+        curr = 3
+        #print(k_sequences)
+        #s#top
+        circuit = self.circuit_class.prepare_unitary_base_circuit(self.k_sequences_1, self.theta_values, circuit, qubits)
+        ##circuit = self.circuit_class.prepare_complete_circuit(self.hyperparam_L, self.hyperparam_k, self.symbols, circuit, qubits)
+        #self.curr_circuit = circuit
+        return circuit
+
+    def set_k_sequence(self, k_sequence):
+      self.k_sequences_1 = k_sequence
+    
+    def get_prob_layers(self, depth_value):
+        #p-->num_depth, c--> num_available_unitaries
+        #self.classical_prob_layers = []
+        #self.dense_layers = []
+        #for i in range(depth_value):
+         #   self.classical_prob_layers.append(tf.keras.layers.Softmax())
+         #   self.dense_layers.append(tf.keraslayers.Dense(1,len(self.possible_unitaries)))
+        self.complete_dense = tf.keras.layers.Dense(len(self.circuit_class.possible_unitaries))
+        self.complete_softmax = tf.keras.layers.Softmax(axis=-1)
+
+    
+    def sample(self, depth_value):
+        depth_value = 10
+        temp_input = tf.convert_to_tensor(np.ones((depth_value, 1),dtype=np.float32))
+        temp_output = self.complete_dense(temp_input)
+        temp_output = self.complete_softmax(temp_output)
+        #self.alpha_param =  temp_output    
+        self.probs = temp_output
+        #sampled_k --> batch_size,1 where batch_size = depth_value
+        ####sampled_k = tf.random.categorical(self.probs, 1)
+        sampled_k  = tf.math.argmax(self.probs,axis=-1)
+        sequence_tester.append(sampled_k)
+        #sampled_k = sampled_k.numpy()
+        #print("sample is called")
+        return sampled_k
+    
+    def prepare_quantum_layer(self, qubits):
+        #self.pqc_layer = tfq.layers.PQC(self.prepare_circuit(qubits),self.readouts)
+        self.pqc_layer = tfq.layers.PQC(self.prepare_circuit_1(qubits),self.readouts)
+        
 
     def call(self, input_state):
-        curr_circuit = self.prepare_circuit(input_state)
-        output = self.expectation_layer(curr_circuit, self.theta_values, operators=self.readouts)
+        #curr_circuit = self.prepare_circuit(input_state[0], self.qubits)
+        #output = self.expectation_layer(input_state[0], symbol_names=self.theta_values, operators=self.readouts)
+        self.prepare_quantum_layer(self.qubits)
+        #print("sample is called")
+        output = self.pqc_layer(input_state[0])
         return output
+    
+    def get_reinforce(self, y_true, y_pred):
+        return -(tf.math.log(self.probs))*(tf.keras.losses.mean_absolute_error(y_true, y_pred))
 
+    def get_policy_gradient_loss(self, y_true, y_pred):
+        #return tf.math.log(self.probs)*(tf.math.reduce_sum(abs(y_pred-y_true)))
+        #return -tf.math.log(self.probs)*(tf.keras.losses.mean_absolute_error(y_true, y_pred))
+        #return [-tf.reduce_mean(tf.math.log(self.probs)),(tf.keras.losses.mean_absolute_error(y_true, y_pred))]
+        return (tf.keras.losses.mean_absolute_error(y_true, y_pred))
+    
+    
+
+    
 
 ## complete class to wrap up the hyper parameter optimisation process:--->
 ## gaussian proceses will be used for hyper param optimisation
 class complete_model:
     
-    def __init__(self, num_qubits, noisy_device, category, num_datapoints, max_allowed_depth=15):
+    def __init__(self, num_qubits, noisy_device, category, num_datapoints, qubits, search_by_loop=False,  max_allowed_depth=15):
+        
         self.continous_param_model = Nacl_procedure(num_qubits, noisy_device, category, max_allowed_depth)
         #self.L_values = self.continous_param_model.all_symbols[0]
         #self.k_values = self.continous_param_model.all_symbols[1:k_values_end_index]
-        self.L_values_range = [i for i in max_allowed_depth]
-        self.k_values_range = [len(noisy_device.allowed_gates[i]) for i in range(num_qubits)]
+        self.L_values_range = [i for i in range(max_allowed_depth)]
+        self.k_values_range = [len(noisy_device.gate_set_list[i]) for i in range(num_qubits)]
         self.dict_for_grid_search = dict(L_values = self.L_values_range, k_values = self.k_values_range)
         self.num_datapoints = num_datapoints
         self.num_qubits = num_qubits
         self.category = category
         self.max_depth = max_allowed_depth
+        self.qubits = qubits
+        self.train_loss = 10000
+        self.search_by_loop = search_by_loop
 
-    def create_continous_param_model(self, L_values, k_values):
+    def create_continous_param_model(self, L_values):
         curr_model = self.continous_param_model
-        curr_model.set_hyperparam_values(L_values, k_values)
+        curr_model.set_hyperparams_value(L_values)
+        curr_model.set_readouts(self.category, self.qubits)
+        curr_model.get_prob_layers(L_values)
+        #curr_model.prepare_quantum_layer(self.qubits)
+        #curr_model.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.02),
+         #                                               loss=tf.keras.losses.MeanAbsoluteError,
+        #)
         curr_model.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.02),
-                                                        loss=tf.keras.losses.MeanAbsoluteError,
+                                                  loss=[self.continous_param_model.get_policy_gradient_loss]
+                                                        ,
+                                                        run_eagerly=True,
         )
         return curr_model
+      
+    def set_train_data_points(self, train_state, train_label):
+         self.train_state = train_state
+         self.train_label = train_label
 
     
-    def execute_L_k_theta_optimisation(self, L_values, train_state, train_label, qubits, *k_values):
+    def execute_L_k_theta_optimisation(self, L_values):
+        model = self.create_continous_param_model(L_values)
+        #model.set_readouts(self.category, self.qubits)
+        #print(k_values)
+        self.train_circuits = []
+        train_state, train_labels = generate_train_data_for_state(self.num_qubits, self.qubits, 1)
+        #for state in train_state:
+         #     self.train_circuits.append(self.continous_param_model.prepare_circuit(state, self.qubits))
+        self.train_circuits = train_state
+        self.train_circuits = tfq.convert_to_tensor(self.train_circuits)
         
-        model = self.create_continous_param_model(L_values, k_values)
-        
-        callbacks = tf.keras.callbacks.Tensorboard(
-        log_dir=tensorboard_log_path,
-        histogram_freq=0,
-        write_graph=True,
-        write_grads=False,
-        write_images=False)
-
+        #callbacks = tf.keras.callbacks.Tensorboard(
+        #log_dir=tensorboard_log_path,
+        #histogram_freq=0,
+        #write_graph=True,
+        #write_grads=False,
+        #write_images=False)
+        callbacks = initialize_tensorboard_summary(log_dir=tensorboard_log_path)
         #get the train data
 
         ##qubits = cirq.GridQubit.rect(1,self.num_qubits)
@@ -182,17 +315,18 @@ class complete_model:
        ## elif self.category==2:
          ##    train_state, train_label = get_training_data_for_unitary_compilation(self.num_qubits, qubits)
         print("Training the model for continous params")
-        history = model.fit(x=train_state, y=train_label, epochs=Num_Epochs, batch_size=4, callbacks=[callbacks])
+        history = model.fit(x=self.train_circuits, y=self.train_label, epochs=Num_Epochs, batch_size=4, callbacks=[callbacks], verbose=1 if epoch % 100 == 0 else 0)
         
-        train_loss = history.history['train_loss'][-1]
+        train_loss = history.history['loss'][-1]
+        #print(history.history.keys())
         
         print("The train_loss is:{0:.4%}".format(train_loss))
         global best_train_loss
 
-        if best_train_loss>train_loss:
-            best_train_loss = train_loss
+        if self.train_loss>train_loss:
+            self.train_loss = train_loss
             ##saving the best model 
-            save_model(model, model_save_path, Num_Epochs)
+            #save_model(model, model_save_path, Num_Epochs)
         
         del model
         K.clear_session()
@@ -205,18 +339,142 @@ class complete_model:
                                     name="k_value_for"+str(i)+"th_qubit") 
                                     for i in range(self.num_qubits)]
         self.dimensions = [self.L_space]
-        self.dimensions += self.k_space_list
+        #self.dimensions += self.k_space_list
 
         self.default_params = [1]
-        self.default_params += self.k_default_list
+        #self.default_params += self.k_default_list
     
+    #using gp minimize
     def optimize_params(self):
-        search_result = gp_minimize(func=self.execute_L_k_theta_optimisation,
+        curr_method = self.search_by_loop
+        @use_named_args(dimensions=self.dimensions)
+        def fitness_wrapper(*args, **kwargs):
+             if curr_method:
+               return self.execute_L_k_theta_optimisation_1(*args, **kwargs) 
+               #return self.train_RL_model(*args, **kwargs)
+             return self.train_RL_model(*args, **kwargs)
+        search_result = gp_minimize(func=fitness_wrapper,
                             dimensions=self.dimensions,
                             acq_func='EI', # Expected Improvement.
-                            n_calls=40,
+                            n_calls=11,
                             x0=self.default_params)
         return search_result
+    
+    def execute_L_k_theta_optimisation_1(self, L_values):
+        L_values = 10
+        model = self.create_continous_param_model(L_values)
+        #model.set_readouts(self.category, self.qubits)
+        #print(k_values)
+        self.train_circuits = []
+        train_state, train_labels = generate_train_data_for_state(self.num_qubits, self.qubits)
+        print("train data has been generated for sate prep task")
+        #for state in train_state:
+         #     self.train_circuits.append(self.continous_param_model.prepare_circuit(state, self.qubits))
+        self.train_circuits = train_state
+        self.train_circuits = tfq.convert_to_tensor(self.train_circuits)
+        
+       
+        callbacks = initialize_tensorboard_summary(log_dir=tensorboard_log_path)
+        #get the train data
+
+        ##qubits = cirq.GridQubit.rect(1,self.num_qubits)
+        ##train_state, train_label = get_train_data_for_observable_extraction(self.num_qubits, qubits, self.num_datapoints)
+        
+        ##if self.category==1:
+          ##  train_state, train_label = get_training_data_for_unitary_compilation(self.num_qubits, qubits)
+        
+       ## elif self.category==2:
+         ##    train_state, train_label = get_training_data_for_unitary_compilation(self.num_qubits, qubits)
+        possible_k_sequences = generate_possible_k_sequences(3, len(self.continous_param_model.circuit_class.possible_unitaries))
+        train_loss_curr = 1000000
+        best_list = []
+        for K_sequence in possible_k_sequences:
+          #print(K_sequence)
+          #stop
+          print("Training the model for continous params for sequence:{}".format(K_sequence))
+          model.set_k_sequence(K_sequence)
+
+          history = model.fit(x=self.train_circuits, y=self.train_label, epochs=Num_Epochs, batch_size=4, callbacks=[callbacks], verbose=0)
+          curr_loss = history.history['loss'][-1]
+          print(curr_loss)
+          K.clear_session()
+          if curr_loss<train_loss_curr:
+            train_loss_curr = curr_loss
+            best_list.append(K_sequence)
+          
+        train_loss = train_loss_curr
+        #print(history.history.keys())
+        
+        print("The train_loss is:{0:.4%}".format(train_loss))
+        global best_train_loss
+
+        if self.train_loss>train_loss:
+            self.train_loss = train_loss
+            ##saving the best model 
+            #save_model(model, model_save_path, Num_Epochs)
+        
+        del model
+        print(best_list[-1])
+        print(train_loss_curr)
+        print("just checking for the L_value=10")
+        stop
+        return train_loss
+    
+    def train_RL_model(self, L_values):
+        num_episodes  = max_episode_length
+        #max episode length will be the depth value
+        #max_episodes: a hyper param
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
+        model_pqc = self.create_continous_param_model(L_values)
+              #model.set_readouts(self.category, self.qubits)
+              #print(k_values)
+        self.train_circuits = []
+        train_state, train_labels = generate_train_data_for_state(self.num_qubits, self.qubits, 1)
+        #for state in train_state:
+        #     model.train_circuits.append(model.continous_param_model.prepare_circuit(state, self.qubits))
+        self.train_circuits = train_state
+        self.train_circuits = tfq.convert_to_tensor(self.train_circuits)
+              
+            
+        callbacks = initialize_tensorboard_summary(log_dir=tensorboard_log_path)
+          
+        for i in range(num_episodes):
+            
+            #with tf.GradientTape() as tape:
+            sampled_k = model_pqc.sample(L_values)
+             
+            
+            model_pqc.set_k_sequence(sampled_k)
+            model_pqc.prepare_quantum_layer(self.qubits)
+              #model_pqc.compile(optimizer = tf.keras.optimizers.Adam(learning_rate=0.02),
+               #                                   loss=[self.continous_param_model.get_policy_gradient_loss]
+                #                                        ,
+                 #                                       run_eagerly=True,
+       # )
+            history = model_pqc.fit(x=self.train_circuits, y=self.train_label, epochs=Num_Epochs, batch_size=4, callbacks=[callbacks], verbose=1 if epoch % 100 == 0 else 0)
+            curr_loss = history.history['loss'][-1]
+            with tf.GradientTape() as tape:
+             sampled_k = model_pqc.sample(L_values)
+             reinforce_loss = -tf.math.log(model_pqc.probs)*curr_loss
+            grads = tape.gradient(reinforce_loss, model_pqc.complete_dense.trainable_weights) 
+            
+            optimizer.apply_gradients(zip(grads, model_pqc.complete_dense.trainable_weights))
+                        
+    
+    
+
+    
+    
+
+    
+    
+    
+        
+
+        
+    
+            
+
 
 
                         
