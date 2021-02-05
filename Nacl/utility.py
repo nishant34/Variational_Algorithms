@@ -3,6 +3,18 @@ import numpy as np
 from random import randint
 from skopt.plots import plot_convergence
 
+
+"""
+This contains the code for various utility functions to generate a custom device connectivity to test various possible cases along with the interface
+for the ourense device described in the Nacl paper such as allowed gate list. 
+
+"""
+
+
+
+"""
+Function to generate a custom device connectivity.
+"""
 def sample_device_connectivity(num_qubits, random=False):
     connectivity = []
     
@@ -28,7 +40,9 @@ def sample_device_connectivity(num_qubits, random=False):
          connectivity.append(curr_list)
     return connectivity
     
-
+"""
+This is used to generate a custom allowed gate set for various qubits.
+"""
 def get_allowed_gate_list(num_qubits, random = False):
     sample_allowed_gates = ["RX","RY","RZ","1,2 CZ","2,3 CNOT","X","Y","Z","I","H"]
     allowed_gate_list = []
@@ -57,12 +71,16 @@ def get_allowed_gate_list(num_qubits, random = False):
         allowed_gate_list.append(curr_gate_list)
     return allowed_gate_list
 
-##a function to plot visualisation of thehyperparam search  
+"""
+a function to plot visualisation of the hyperparam search  
+"""
 def progress_visualization(search_result):
     
     plot_convergence(search_result)
 
-
+"""
+utility function to extract qubit indices form the multi qubit gate name.
+"""
 def extract_qubit_gates_from_multi_qubit(gate_name):
     ##The name of a multi qubit gate is of the folowing format--> 1,2 CNOT and extend it for n --> 1,2,3..,n CNOT
     components = gate_name.split(" ")
@@ -71,7 +89,9 @@ def extract_qubit_gates_from_multi_qubit(gate_name):
 
     return qubit_indices, gate_name
 
-
+"""
+A function to generate all possible combination of n_qubit unitary matrices that can bve applied to a particular layer.
+"""
 def get_possible_unitaries(allowed_gate_list, num_qubits):
     
     if num_qubits==1:
@@ -125,6 +145,10 @@ def get_possible_unitaries(allowed_gate_list, num_qubits):
     unitary_combinations_final = [] 
     [unitary_combinations_final.append(x) for x in unitary_combinations if x not in unitary_combinations_final] 
     return unitary_combinations_final
+
+"""
+The gate list for the ourense device.
+"""
 def get_ourense_gate_list(num_qubits=5):
     gate_list_1 = [[ "RZ", "X"]]
     gate_list_1.append(["1,2 CNOT", "RZ", "X"])
@@ -133,7 +157,12 @@ def get_ourense_gate_list(num_qubits=5):
     gate_list_1.append(["4,5 CNOT", "RZ", "X"])
     return gate_list_1
 
-    
+
+"""
+generating all the possible k_sequences to iterate over for the method described in Nacl paper.
+Inputs--> number of possible unitary matrices for a given layer which will be generated given an allowed gate set using the fucntion described above.
+Output--> All possible k_sequences to iterate over.
+"""
 def generate_possible_k_sequences(L_value, num_possible_unitaries):
   if L_value==1:
     k_values=  [[i] for i in range(num_possible_unitaries)]
