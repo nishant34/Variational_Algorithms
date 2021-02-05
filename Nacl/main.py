@@ -12,6 +12,9 @@ from train_helper import *
 from utility import *
 import argparse
 
+"""
+This contains the code  to run the Nacl model given the arguements required.
+"""
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_qubits",help="The number of qubits for which the variational algrithm is to be ananlysed")
