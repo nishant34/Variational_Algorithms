@@ -5,6 +5,10 @@ import numpy
 from cirq.devices import GridQubit
 from Gate_set import *
 
+
+# This contains the class which acts as an interface for the hardware properties of the device. I contains custom functions to induce noise using multiplicative model. 
+# It uses random rotation with a small angle multipied to the original gate matrix as noise.
+
 class Device(cirq.Device):
     def __init__(self, gate_set_list, connectivity, num_qubits, name):
         ##connectivity should be in form a list with each element being a 2 element list determining both are connected
