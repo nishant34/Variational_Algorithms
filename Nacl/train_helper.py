@@ -5,6 +5,10 @@ import os
 import tensorflow as tf
 import tensorflow_quantum as tfq
 
+"""
+This contains the helper function required to train the architecture search model to generate train data, save model, load model etc.
+along with to compare the results of model with the circuit to prepare 5 qubit state given in Nacl paper.
+"""
 theta_1 = 0.785398
 theta_2 = 2.356194 
 theta_3 = 3.141593
@@ -16,6 +20,10 @@ theta_8 = 0.785398
 theta_9 = 2.356194
 theta_10 = 3.141593
 theta_11 = np.pi/2
+
+"""
+To generate train data for the observable extraction where input is a stae and output is a numerical value.
+"""
 def get_train_data_for_observable_extraction(num_qubits,qubits,num_datapoints):
     train_data = []
     labels = []
@@ -59,7 +67,9 @@ def get_train_data_for_observable_extraction(num_qubits,qubits,num_datapoints):
     return train_data, labels
 
 
-#utility funciton to generate train data having the 2-design states
+"""
+utility funciton to generate train data having the 2-design states.
+"""
 def get_training_data_for_unitary_compilation_helper(num_qubits,qubits):
     #handle the tensor conversion
     train_data = []
@@ -128,10 +138,10 @@ def lr_scheduler(epoch, lr):
 
 
 
-#def custom_cost_function():
 
-##class Custom_Quantum_Natrual_Gradient():
-
+"""
+Function to generate a random input train circuit.
+"""
 def get_input_circuit(num_qubits, qubits, circuit):
     ##getting the one qubit gates 
     #L_value = 15
@@ -149,6 +159,9 @@ def get_input_circuit(num_qubits, qubits, circuit):
 
     return circuit
 
+"""
+Function to generate train data for unitary compilation where data contains complete 2-design states along with the output states.
+"""
 def get_training_data_for_unitary_compilation(num_qubits, qubits):
     train_data, _ = get_training_data_for_unitary_compilation_helper(num_qubits, qubits)
     expectation_layer  = tfq.layers.Expectation()
@@ -199,9 +212,12 @@ def train_RL_model(model, num_episodes, L_value):
         
       grads = tape.gradient(curr_loss, model_pqc.complete_dense.trainable_weights)
       optimizer.apply_gradients(zip(grads, model_pqc.complete_dense.trainable_weights)) 
-      
+  
+"""
+function to generate the 5 qubit state given in the paper.
+"""
 def generate_train_data_for_state(num_qubits, qubits):
-    ####5 qubit state given in the NacL paper-->5 qubit circuit
+    
     train_data = []
     circuit = cirq.Circuit()
     circuit.append((cirq.X**theta_11)(qubits[0]))
