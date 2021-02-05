@@ -5,10 +5,13 @@ from utility import *
 
 #import tensorflow as tf
 #import tensorflow_quantum as tfq
-##class which acts as an interface to add gates to the circuit
+##class which acts as an interface to add gates to the circuit. 
+##It contains the custom gate set which contains the gates available in the device and then application of various gates using these gates.
+
 theta_u = np.pi/2
 class custom_gate_set:
     def __init__(self):
+        #some gates are defined in the initializer whcih are to be taken as fundamental and rest are build using these gates.
         self.gate_list = ["I","RX","RY","RZ","X","Y","Z","CNOT","CZ","CX","H"]
         self.continous_param_gate_list = ["RX","RY","RZ","CZ","CX"]
         self.gate_to_num_qubits_dict = {
@@ -39,6 +42,7 @@ class custom_gate_set:
         self.gate_function_list.append(cirq.H)
         
     def get_gate_dict(self):
+        #just a mapping of gate names to numbers
         gate_dict = {
 
         }
@@ -57,6 +61,7 @@ class custom_gate_set:
         return gate_function
     
     def recursive_n_bit_controlled(self,circuit,angle,qubits,num_qubits):
+        #implementation of recursive n-bit controlled gate using 1 and 2 qubit gates.
         if len(qubits)==2:
            circuit.append(cirq.CZ(*[qubits[0],qubits[1]])**angle)
            return 
@@ -74,6 +79,7 @@ class custom_gate_set:
         self.recursive_n_bit_controlled(circuit,angle1,qubits_new,num_qubits-1)
     
     def recursive_CNOT(self,circuit,angle,qubits,num_qubits):
+        #implementation of n-bit CNOT gate.
        if len(qubits)==2:
         circuit.append(cirq.H(qubits[1]))
         circuit.append(cirq.CZ(*[qubits[0],qubits[1]])**angle)
@@ -98,7 +104,7 @@ class custom_gate_set:
 
     
     def add_gate_to_circuit(self, circuit, qubits, gate_name, num_qubits_to_act, required_noise, conitnous_param, symbol):
-        
+        # function to add a particular gate given name and qubits to add along with any parameter is required or not.
         gate_dict = self.get_gate_dict()
 
         if num_qubits_to_act ==1:
@@ -143,6 +149,7 @@ class custom_gate_set:
 
             
     def gates_commute(self, gate_1, gate_2, num_qubits_1, num_qubits_2):
+            #funciton to check if 2 gates commute or not so that their position in circuit can be exchanged so as to make the circuit maximally prallelizable.
             curr = max(num_qubits_1, num_qubits_2)
             qubits = cirq.GridQubit.rect(1,curr)
             circuit = cirq.Circuit()
