@@ -19,8 +19,19 @@ from skopt.utils import use_named_args
 #import tensorflow_probaility as tfp
 from utility import *
 
+"""
+It contains the code for Nacl model along with approach similar to differentiable quantum architecture search using policy based gradients.
+It contains circuit class to describe the basic circuit structure in cirq and then Nacl procedure class which acts as a wrapper to the circuit and connects to 
+tensorflow quantum using the PQC layer.
+"""
 sequence_tester = []
 
+"""
+This class acts as a circuit interface for developing a circuit given depth values and gate lists. It has 2 kinds of fucntions. One uses a complete matrix of gates
+varying in both dimensions -> gate_index and depth. The other is uniatry base circuit way where given gates available--> all possibble n-qubit unitary matrices are formed for a 
+to act as a particular layer and then hyperparams are just depth value d and a list of len d --> [k1,.......kd] where ki is an index corresponding to unitary.
+
+"""
 class Nacl_circuit:
     def __init__(self, num_qubits, allowed_gate_set, noisy_device, max_depth=15):
         #allowed gate set is 2-D list with 1st dimension determining the quibit and 2nd the allowed gates
@@ -34,6 +45,9 @@ class Nacl_circuit:
         #print(self.noisy_device)
         self.possible_unitaries = get_possible_unitaries(allowed_gate_set,num_qubits)
     
+    """
+     This funciton act as a gate interface to deal with the custom_gate_set class and is used in preparing the circuit given just the gate names and qubits.
+    """
     def manage_gate_interface(self, gate_name, qubits, circuit, symbol, index):
         if gate_name[0].isdigit():
             qubit_indices, gate_name = extract_qubit_gates_from_multi_qubit(gate_name)
@@ -53,7 +67,11 @@ class Nacl_circuit:
             if self.noisy_device.noise_method==1:
                 self.noisy_device.apply_manual_error_gates(gate_name,circuit,qubits[index],1)
 
-        
+    """
+    This function is used for preparing the complete circuit where gates for each qubi  are given for each timestep in a 2D form.
+    Inputs--> depth value, gate indices, circuit and qubit_set
+    Output--> circuit
+    """
     def prepare_complete_circuit(self, L_value, k_values, symbols, circuit, qubits):
             #k-values is also 2D similar to allowed gate set
             ##Handling the controlled qubit case---->
@@ -76,6 +94,10 @@ class Nacl_circuit:
             return circuit
     
     def prepare_unitary_base_circuit(self, k_sequence, symbols, circuit, qubits):
+        
+        """
+        This is based on matrix for a particular layer described above and then just a list of d indices as the hyperparam along with depth value.
+        """
          counter = 0
          for k_value in k_sequence:
              #print(k_value)
@@ -88,6 +110,9 @@ class Nacl_circuit:
          return circuit
 
     def append_combination(self, circuit, curr_layer_list, qubits, symbols):
+        """
+        This is used to append a given combination of gates to the circuit which is desribed by a particular index in self.possible_unitaries.
+        """
         index = 0
         #print("in the append combination")
         #print(len(curr_layer_list))
@@ -102,9 +127,14 @@ class Nacl_circuit:
         SVGCircuit(circuit)
     
     
-
+"""
+This class uses the circuit class to build a circuit and then evaluate and train the continous params using back_prop by integrating with tensorflow quantum.
+"""
 class Nacl_procedure(Model):
-
+    """
+    In the initializer function continous_parameters(which later are converted to variables or weights) are initialised  along with discrete hyperparams.
+    
+    """
     def __init__(self, num_qubits, noisy_device, category, max_allowed_depth = 15):
         super(Nacl_procedure, self).__init__()
         self.num_qubits = num_qubits
@@ -135,6 +165,9 @@ class Nacl_procedure(Model):
     ##def make_gates_maximally_parallel(self):
 
     def get_input_circuit(self, L_value, k_values, symbols, circuit, qubits):
+        """
+        To get the input circuit for PQC_layer given all hyper_params and continous_params value.
+        """
         self.input_circuit = cirq.Circuit()
         #depends if we need a device dependent input circuit or not-------------
         for i in range(L_value):
@@ -149,6 +182,9 @@ class Nacl_procedure(Model):
         self.train_outputs  = train_labels
     
     def set_readouts(self, category, qubits):
+        """
+        To set the readout bits for the pqc_layer.
+        """
         self.qubits = qubits
         self.readouts = (cirq.Z(qubits[-1]))
 
@@ -161,12 +197,15 @@ class Nacl_procedure(Model):
         #self.hyperparam_k = k_values
 
     def prepare_circuit(self, qubits):
+        """
+        To prepare the circuit by sampling values using a dense layer similar to Reinforce method.
+        """
         circuit = cirq.Circuit()
         #print("in he prepare circuit")
         #print(qubits)
         #circuit = cirq.Circuit()
         #self.hyperparam_L=10
-        curr = 10
+        ####curr = 10
         #self.get_prob_layers(curr)
         k_sequences  = self.sample(curr)
         #print(k_sequences)
@@ -177,12 +216,15 @@ class Nacl_procedure(Model):
         return circuit
     
     def prepare_circuit_1(self, qubits):
+        """
+        Preparing circuit by iterating iover all possible values in the k's space.
+        """
         circuit = cirq.Circuit()
         #print("in he prepare circuit")
         #print(qubits)
         #circuit = cirq.Circuit()
         #self.hyperparam_L=10
-        curr = 3
+        ####curr = 3
         #print(k_sequences)
         #s#top
         circuit = self.circuit_class.prepare_unitary_base_circuit(self.k_sequences_1, self.theta_values, circuit, qubits)
@@ -193,6 +235,9 @@ class Nacl_procedure(Model):
     def set_k_sequence(self, k_sequence):
       self.k_sequences_1 = k_sequence
     
+    """
+    To initialise the layers for policy function.
+    """
     def get_prob_layers(self, depth_value):
         #p-->num_depth, c--> num_available_unitaries
         #self.classical_prob_layers = []
@@ -204,6 +249,9 @@ class Nacl_procedure(Model):
         self.complete_softmax = tf.keras.layers.Softmax(axis=-1)
 
     
+    """
+    This is used for sampling list of indices of unitary matrices given a depth d using dense and softmax layers. This is simialr Deep RL.
+    """
     def sample(self, depth_value):
         depth_value = 10
         temp_input = tf.convert_to_tensor(np.ones((depth_value, 1),dtype=np.float32))
@@ -218,12 +266,14 @@ class Nacl_procedure(Model):
         #sampled_k = sampled_k.numpy()
         #print("sample is called")
         return sampled_k
-    
+    """
+    Preparing the PQC layer for optimisation.
+    """
     def prepare_quantum_layer(self, qubits):
         #self.pqc_layer = tfq.layers.PQC(self.prepare_circuit(qubits),self.readouts)
         self.pqc_layer = tfq.layers.PQC(self.prepare_circuit_1(qubits),self.readouts)
         
-
+    
     def call(self, input_state):
         #curr_circuit = self.prepare_circuit(input_state[0], self.qubits)
         #output = self.expectation_layer(input_state[0], symbol_names=self.theta_values, operators=self.readouts)
@@ -232,6 +282,9 @@ class Nacl_procedure(Model):
         output = self.pqc_layer(input_state[0])
         return output
     
+    """
+    Losses in the reinforce method--> 
+    """
     def get_reinforce(self, y_true, y_pred):
         return -(tf.math.log(self.probs))*(tf.keras.losses.mean_absolute_error(y_true, y_pred))
 
@@ -245,12 +298,16 @@ class Nacl_procedure(Model):
 
     
 
-## complete class to wrap up the hyper parameter optimisation process:--->
-## gaussian proceses will be used for hyper param optimisation
+""" 
+complete_model class to wrap up the hyper parameter optimisation process. . 
+"""
+
 class complete_model:
     
     def __init__(self, num_qubits, noisy_device, category, num_datapoints, qubits, search_by_loop=False,  max_allowed_depth=15):
-        
+        """
+        Initialising the training detail and pQC_layer model.
+        """
         self.continous_param_model = Nacl_procedure(num_qubits, noisy_device, category, max_allowed_depth)
         #self.L_values = self.continous_param_model.all_symbols[0]
         #self.k_values = self.continous_param_model.all_symbols[1:k_values_end_index]
@@ -264,7 +321,10 @@ class complete_model:
         self.qubits = qubits
         self.train_loss = 10000
         self.search_by_loop = search_by_loop
-
+    
+    """
+    To compile a tf.keras model as  the continous param model for a given L_value.
+    """
     def create_continous_param_model(self, L_values):
         curr_model = self.continous_param_model
         curr_model.set_hyperparams_value(L_values)
@@ -285,7 +345,7 @@ class complete_model:
          self.train_state = train_state
          self.train_label = train_label
 
-    
+    """
     def execute_L_k_theta_optimisation(self, L_values):
         model = self.create_continous_param_model(L_values)
         #model.set_readouts(self.category, self.qubits)
@@ -331,7 +391,10 @@ class complete_model:
         del model
         K.clear_session()
         return train_loss
-    
+    """
+    """
+    To generate the discrete search space for hyper params which can be used in gp_minimize.
+    """
     def generate_discrete_search_space(self):
         self.k_default_list = [0]*self.num_qubits
         self.L_space = Integer(low=1, high=self.max_depth, name="L_values")
@@ -344,7 +407,9 @@ class complete_model:
         self.default_params = [1]
         #self.default_params += self.k_default_list
     
-    #using gp minimize
+    """
+    Using the gp_minimize inbuilt function in skopt over L_values. 
+    """
     def optimize_params(self):
         curr_method = self.search_by_loop
         @use_named_args(dimensions=self.dimensions)
@@ -360,6 +425,9 @@ class complete_model:
                             x0=self.default_params)
         return search_result
     
+    """
+    Running the complete optimisation process which means optimising hyper params along with the continous params.
+    """
     def execute_L_k_theta_optimisation_1(self, L_values):
         L_values = 10
         model = self.create_continous_param_model(L_values)
@@ -420,6 +488,9 @@ class complete_model:
         stop
         return train_loss
     
+    """
+    To train the poliy based model for a given L_value which samples a K-sequence using dense layers and train for max_episode_length epoch.
+    """
     def train_RL_model(self, L_values):
         num_episodes  = max_episode_length
         #max episode length will be the depth value
