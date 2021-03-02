@@ -1,4 +1,4 @@
-# Quantum Approximate Optimization of Non-Planar Graph Problemson a Planar Superconducting Processor
+# Quantum Approximate Optimization of Non-Planar Graph Problems on a Planar Superconducting Processor
 * Implementation of Nacl model given in the following [paper](https://arxiv.org/abs/2004.04197).
 * Basic Gates (only the ones supported by tensorflow quantum) have been used.
 * Three structures provided in the paper: Hardware Grid, K-regular graph and Fully Connected have been analysed in the implementation.
