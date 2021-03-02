@@ -485,7 +485,7 @@ class complete_model:
         print(best_list[-1])
         print(train_loss_curr)
         print("just checking for the L_value=10")
-        stop
+        #stop
         return train_loss
     
     """
