@@ -36,7 +36,7 @@ The code contaisn the following files:
 * utility.py --> contains various utility functions along with functions.
 * train_helper.py --> This contains the helper function required to train the architecture search model to generate train data, save model, load model etc.
 * main.py --> To run the complete code by parsing the arguements required.
-* State.py
+* State.py --> Contains the state class which contains verious functions such as initializing the state, generating params and so on.
 
 
 
