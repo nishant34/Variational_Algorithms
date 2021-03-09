@@ -57,18 +57,23 @@ class gamma_unitary:
         intermediate gate which uses syc gate and is used in routing also, applied to every pair of connected qubits during the gamma_unitary
         and has gamma,w dependent single qubit rotation gates.
         """
-        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123)(self.symbol*weight)(self.qubits[qubit_index_1]))
-        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123)(self.symbol*weight)(self.qubits[qubit_index_2]))
+    def apply_ZZ_swap_gate(self, weight, qubit_index_1, qubit_index_2):
+        """
+        intermediate gate which uses syc gate and is used in routing also, applied to every pair of connected qubits during the gamma_unitary
+        and has gamma,w dependent single qubit rotation gates.
+        """
+        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123, exponent = weight*(self.symbol))(self.qubits[qubit_index_1]))
+        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123, exponent = weight*(self.symbol))(self.qubits[qubit_index_2]))
         self.apply_SYC_gate(qubit_index_1, qubit_index_2)
-        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123)(self.symbol*weight)(self.qubits[qubit_index_1]))
-        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123)(self.symbol*weight)(self.qubits[qubit_index_2]))
+        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123, exponent = weight*(self.symbol))(self.qubits[qubit_index_1]))
+        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123, exponent = weight*(self.symbol))(self.qubits[qubit_index_2]))
         self.apply_SYC_gate(qubit_index_1, qubit_index_2)
-        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123)(self.symbol*weight)(self.qubits[qubit_index_1]))
-        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123)(self.symbol*weight)(self.qubits[qubit_index_2]))
+        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123, exponent = weight*(self.symbol))(self.qubits[qubit_index_1]))
+        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123, exponent = weight*(self.symbol))(self.qubits[qubit_index_2]))
         self.apply_SYC_gate(qubit_index_1, qubit_index_2)
-        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123)(self.symbol*weight)(self.qubits[qubit_index_1]))
-        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123)(self.symbol*weight)(self.qubits[qubit_index_2]))
-    
+        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123, exponent = weight*(self.symbol))(self.qubits[qubit_index_1]))
+        self.circuit.append(cirq.PhasedXPowGate(phase_exponent=0.123, exponent = weight*(self.symbol))(self.qubits[qubit_index_2]))
+        
     def apply_ZZ_gate(self, weight, qubit_index_1, qubit_index_2):
         """
         intermediate gate which uses syc gate and is applied to every pair of connected qubits during the gamma_unitary
